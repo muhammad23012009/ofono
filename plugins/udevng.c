@@ -1182,6 +1182,109 @@ static gboolean setup_quectelqmi(struct modem_info *modem)
 	return TRUE;
 }
 
+static void setup_mbim_pci(struct device_info *info,
+				const char **ctl,
+				const char **net,
+				const char **atcmd)
+{
+	struct udev *udev = udev_new();
+	struct udev_device *wwan_device, *sub_device;
+
+	GDir *dir = NULL, *subdir = NULL;
+	const gchar *filename = NULL, *subfile = NULL;
+	gchar *path = NULL;
+	gchar *wwan_path = NULL, *sub_path = NULL;
+	const char *sub_subsystem = NULL;
+	const char *type = NULL;
+
+	/* Create a path to the WWAN subsystem with the sysfs path of the
+	 * modem itself. e.g.: /devices/pci0000:00/0000:00:1c.0/0000:08:00.0
+	 */
+	path = g_build_path("/", udev_device_get_syspath(info->udev_device),
+							"wwan", NULL);
+
+	dir = g_dir_open(path, 0, NULL);
+	if (!dir)
+		goto cleanup;
+
+	while ((filename = g_dir_read_name(dir))) {
+		/* Build a path to the WWAN interface (e.g. .../wwan0).
+		 * TODO: We currently assume only one WWAN interface per device.
+		 * This will most likely break with multi-executor modems, but I have
+		 * yet to see any of them available on the market.
+		 */
+		wwan_path = g_build_path("/", path,
+					filename, NULL);
+
+		/* Check if the WWAN interface even exists. */
+		if (!g_file_test(wwan_path, G_FILE_TEST_IS_DIR)) {
+			g_free((void *)wwan_path);
+			continue;
+		}
+
+		subdir = g_dir_open(wwan_path, 0, NULL);
+		if (!subdir) {
+			g_free((void *)wwan_path);
+			continue;
+		}
+
+		wwan_device = udev_device_new_from_syspath(udev,
+							wwan_path);
+
+		/* Only copy the WWAN interface name once */
+		if (!*net)
+			*net = g_strdup(udev_device_get_sysname(wwan_device));
+
+		/* The WWAN directory will now have subdirectories, for each
+		 * associated control node (e.g. wwan0mbim0, wwan0at0). Open
+		 * each of the subdirectories to figure out their type.
+		 */
+		while ((subfile = g_dir_read_name(subdir))) {
+			/* Build a path to the directory for each of the WWAN
+			 * control nodes that we found earlier. (e.g. /wwan0/wwan0mbim0).
+			 * Check if the subdirectory belongs to the WWAN subsystem,
+			 * and if so, check its type (MBIM or AT).
+			 */
+			sub_path = g_build_filename("/", wwan_path,
+							subfile, NULL);
+
+			/* We only want the subdirectories for the control nodes. */
+			if (!g_file_test(sub_path, G_FILE_TEST_IS_DIR)) {
+				g_free((void *)sub_path);
+				continue;
+			}
+
+			sub_device = udev_device_new_from_syspath(udev,
+								sub_path);
+			sub_subsystem = udev_device_get_subsystem(sub_device);
+
+			/* We can only have one MBIM and AT node in each WWAN interface,
+			 * so set them without checking if they're already set.
+			 */
+			if (g_strcmp0(sub_subsystem, "wwan") == 0) {
+				type = udev_device_get_sysattr_value(sub_device, "type");
+
+				/* Detect the type of the WWAN control node */
+				if (g_strcmp0(type, "MBIM") == 0)
+					*ctl = g_strdup(udev_device_get_devnode(sub_device));
+				else if (g_strcmp0(type, "AT") == 0)
+					*atcmd = g_strdup(udev_device_get_devnode(sub_device));
+			}
+
+			udev_device_unref(sub_device);
+			g_free((void *)sub_path);
+		}
+		g_dir_close(subdir);
+		udev_device_unref(wwan_device);
+		g_free((void *)wwan_path);
+	}
+
+cleanup:
+	g_dir_close(dir);
+	g_free((void *)path);
+	udev_unref(udev);
+}
+
 static gboolean setup_mbim(struct modem_info *modem)
 {
 	const char *ctl = NULL, *net = NULL, *atcmd = NULL;
@@ -1200,13 +1303,14 @@ static gboolean setup_mbim(struct modem_info *modem)
 						info->sysattr, subsystem);
 
 		if (g_strcmp0(subsystem, "usbmisc") == 0) /* cdc-wdm */
-			ctl = info->devnode;
+			ctl = g_strdup(info->devnode);
 		else if (g_strcmp0(subsystem, "net") == 0) /* wwan */
-			net = get_ifname(info);
+			net = g_strdup(get_ifname(info));
 		else if (g_strcmp0(subsystem, "tty") == 0) {
 			if (g_strcmp0(info->number, "02") == 0)
-				atcmd = info->devnode;
-		}
+				atcmd = g_strdup(info->devnode);
+		} else if (g_strcmp0(subsystem, "pci") == 0)
+			setup_mbim_pci(info, &ctl, &net, &atcmd);
 	}
 
 	if (ctl == NULL || net == NULL)
@@ -1219,6 +1323,11 @@ static gboolean setup_mbim(struct modem_info *modem)
 	ofono_modem_set_string(modem->modem, "Device", ctl);
 	ofono_modem_set_string(modem->modem, "NetworkInterface", net);
 	ofono_modem_set_string(modem->modem, "DescriptorFile", descriptors);
+
+	/* Free up all of the strings */
+	g_free((void *)ctl);
+	g_free((void *)net);
+	g_free((void *)atcmd);
 
 	return TRUE;
 }
