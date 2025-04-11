@@ -2317,6 +2317,7 @@ static const struct {
 	const char *pid;
 } pci_driver_list[] = {
 	{ "xmm7xxx",	"imc_ipc",	"0x8086",	"0x7560"},
+	{ "mbim",		"mtk_t7xx",	"0x14c3",	"0x4d75"},
 	{ }
 };
 
