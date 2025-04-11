@@ -1182,6 +1182,80 @@ static gboolean setup_quectelqmi(struct modem_info *modem)
 	return TRUE;
 }
 
+static void setup_mbim_pci(struct device_info *info,
+				const char **ctl,
+				const char **net,
+				const char **atcmd)
+{
+	struct udev *udev = udev_new();
+	struct udev_device *wwan_device, *sub_device;
+
+	GDir *dir = NULL, *subdir = NULL;
+	const gchar *filename = NULL, *subfile = NULL;
+	gchar *path = NULL;
+	gchar *wwan_path = NULL, *sub_path = NULL;
+	const char *sub_subsystem = NULL;
+	const char *type = NULL;
+
+	/* Create a path to the WWAN subsystem in sysfs */
+	path = g_build_path("/", udev_device_get_syspath(info->udev_device),
+							"wwan", NULL);
+
+	dir = g_dir_open(path, 0, NULL);
+	if (!dir)
+		goto cleanup;
+
+	while ((filename = g_dir_read_name(dir))) {
+		/* Build a path to the WWAN interface (e.g. wwan0) */
+		wwan_path = g_build_path("/", path,
+							filename, NULL);
+
+		wwan_device = udev_device_new_from_syspath(udev,
+							wwan_path);
+		*net = g_strdup(udev_device_get_sysname(wwan_device));
+
+		/* Parse all the subdirectories now */
+		subdir = g_dir_open(wwan_path, 0, NULL);
+		if (!g_file_test(wwan_path, G_FILE_TEST_IS_DIR) ||
+				!subdir) {
+			udev_device_unref(wwan_device);
+			g_free(wwan_path);
+			continue;
+		}
+
+		while ((subfile = g_dir_read_name(subdir))) {
+			/* Build a path to the subsystems for the WWAN control nodes */
+			sub_path = g_build_filename("/", wwan_path,
+									subfile, NULL);
+
+			sub_device = udev_device_new_from_syspath(udev,
+								sub_path);
+			sub_subsystem = udev_device_get_subsystem(sub_device);
+
+			if (g_strcmp0(sub_subsystem, "wwan") == 0) {
+				type = udev_device_get_sysattr_value(sub_device, "type");
+
+				/* Detect the subsystem of the subdirectories */
+				if (g_strcmp0(type, "MBIM") == 0)
+					*ctl = g_strdup(udev_device_get_devnode(sub_device));
+				else if (g_strcmp0(type, "AT") == 0)
+					*atcmd = g_strdup(udev_device_get_devnode(sub_device));
+			}
+
+			udev_device_unref(sub_device);
+			g_free(sub_path);
+		}
+		g_dir_close(subdir);
+		udev_device_unref(wwan_device);
+		g_free(wwan_path);
+	}
+
+cleanup:
+	g_dir_close(dir);
+	g_free(path);
+	udev_unref(udev);
+}
+
 static gboolean setup_mbim(struct modem_info *modem)
 {
 	const char *ctl = NULL, *net = NULL, *atcmd = NULL;
@@ -1206,7 +1280,8 @@ static gboolean setup_mbim(struct modem_info *modem)
 		else if (g_strcmp0(subsystem, "tty") == 0) {
 			if (g_strcmp0(info->number, "02") == 0)
 				atcmd = info->devnode;
-		}
+		} else if (g_strcmp0(subsystem, "pci") == 0)
+			setup_mbim_pci(info, &ctl, &net, &atcmd);
 	}
 
 	if (ctl == NULL || net == NULL)
