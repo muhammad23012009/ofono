@@ -385,7 +385,9 @@ static void mbim_subscriber_ready_status_changed(struct mbim_message *message,
 								void *user)
 {
 	struct ofono_sim *sim = user;
+	struct ofono_modem *modem = ofono_sim_get_modem(sim);
 	struct sim_data *sd = ofono_sim_get_data(sim);
+	uint16_t mbimex_version = ofono_modem_get_integer(modem, "MBIMExVersion");
 	uint32_t ready_state;
 	char *imsi;
 	char *iccid;
@@ -393,9 +395,17 @@ static void mbim_subscriber_ready_status_changed(struct mbim_message *message,
 
 	DBG("");
 
-	if (!mbim_message_get_arguments(message, "ussu",
-					&ready_state, &imsi,
-					&iccid, &ready_info))
+	if (mbim_device_mbimex_version_at_least(mbimex_version, 3, 0)) {
+		r = mbim_message_get_arguments(message, "uussu",
+						&ready_state, &ready_flags, &imsi,
+						&iccid, &ready_info);
+	} else {
+		r = mbim_message_get_arguments(message, "ussu",
+						&ready_state, &imsi,
+						&iccid, &ready_info);
+	}
+
+	if (!r)
 		return;
 
 	l_free(sd->iccid);
@@ -413,7 +423,9 @@ static void mbim_subscriber_ready_status_cb(struct mbim_message *message,
 								void *user)
 {
 	struct ofono_sim *sim = user;
+	struct ofono_modem *modem = ofono_sim_get_modem(sim);
 	struct sim_data *sd = ofono_sim_get_data(sim);
+	uint16_t mbimex_version = ofono_modem_get_integer(modem, "MBIMExVersion");
 	uint32_t ready_state;
 	char *imsi;
 	char *iccid;
@@ -426,9 +438,16 @@ static void mbim_subscriber_ready_status_cb(struct mbim_message *message,
 		goto error;
 
 	/* We don't bother parsing MSISDN/MDN array */
-	r = mbim_message_get_arguments(message, "ussu",
-					&ready_state, &imsi,
-					&iccid, &ready_info);
+	if (mbim_device_mbimex_version_at_least(mbimex_version, 3, 0)) {
+		r = mbim_message_get_arguments(message, "uussu",
+						&ready_state, &ready_flags, &imsi,
+						&iccid, &ready_info);
+	} else {
+		r = mbim_message_get_arguments(message, "ussu",
+						&ready_state, &imsi,
+						&iccid, &ready_info);
+	}
+
 	if (!r)
 		goto error;
 

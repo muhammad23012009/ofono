@@ -91,6 +91,8 @@ static void mbim_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 					ofono_gprs_context_cb_t cb, void *data)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	struct ofono_modem *modem = ofono_gprs_context_get_modem(gc);
+	uint16_t mbimex_version = ofono_modem_get_integer(modem, "MBIMExVersion");
 	struct mbim_message *message;
 
 	DBG("cid %u", cid);
@@ -102,9 +104,16 @@ static void mbim_gprs_deactivate_primary(struct ofono_gprs_context *gc,
 	message = mbim_message_new(mbim_uuid_basic_connect,
 					MBIM_CID_CONNECT,
 					MBIM_COMMAND_TYPE_SET);
-	mbim_message_set_arguments(message, "uusssuuu16y",
-					cid, 0, NULL, NULL, NULL, 0, 0, 0,
-					mbim_context_type_internet);
+
+	if (mbim_device_mbimex_version_at_least(mbimex_version, 3, 0)) {
+		mbim_message_set_arguments(message, "uuuuu16yussss",
+						cid, 0, 0, 0, 0, mbim_context_type_internet,
+						0, NULL, NULL, NULL, NULL);
+	} else {
+		mbim_message_set_arguments(message, "uusssuuu16y",
+						cid, 0, NULL, NULL, NULL, 0, 0, 0,
+						mbim_context_type_internet);
+	}
 
 	if (mbim_device_send(gcd->device, GPRS_CONTEXT_GROUP, message,
 				mbim_deactivate_cb, gc, NULL) > 0)
@@ -121,6 +130,7 @@ static void mbim_ip_configuration_cb(struct mbim_message *message, void *user)
 	struct ofono_gprs_context *gc = user;
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
 	struct ofono_modem *modem = ofono_gprs_context_get_modem(gc);
+	uint16_t mbimex_version = ofono_modem_get_integer(modem, "MBIMExVersion");
 	const char *interface;
 	uint32_t session_id;
 	uint32_t ipv4_config_available;
@@ -288,10 +298,18 @@ error:
 	message = mbim_message_new(mbim_uuid_basic_connect,
 					MBIM_CID_CONNECT,
 					MBIM_COMMAND_TYPE_SET);
-	mbim_message_set_arguments(message, "uusssuuu16y",
+
+	if (mbim_device_mbimex_version_at_least(mbimex_version, 3, 0)) {
+		mbim_message_set_arguments(message, "uuuuu16yussss",
+					gcd->active_context, 0, 0, 0, 0,
+					mbim_context_type_internet, 0, NULL,
+					NULL, NULL, NULL);
+	} else {
+		mbim_message_set_arguments(message, "uusssuuu16y",
 					gcd->active_context, 0,
 					NULL, NULL, NULL, 0, 0, 0,
 					mbim_context_type_internet);
+	}
 
 	if (!mbim_device_send(gcd->device, GPRS_CONTEXT_GROUP, message,
 				NULL, NULL, NULL))
@@ -331,6 +349,8 @@ static void mbim_gprs_activate_primary(struct ofono_gprs_context *gc,
 				ofono_gprs_context_cb_t cb, void *data)
 {
 	struct gprs_context_data *gcd = ofono_gprs_context_get_data(gc);
+	struct ofono_modem *modem = ofono_gprs_context_get_modem(gc);
+	uint16_t mbimex_version = ofono_modem_get_integer(modem, "MBIMExVersion");
 	struct mbim_message *message;
 	const char *username = NULL;
 	const char *password = NULL;
@@ -352,16 +372,32 @@ static void mbim_gprs_activate_primary(struct ofono_gprs_context *gc,
 	message = mbim_message_new(mbim_uuid_basic_connect,
 					MBIM_CID_CONNECT,
 					MBIM_COMMAND_TYPE_SET);
-	mbim_message_set_arguments(message, "uusssuuu16y",
-				ctx->cid,
-				1, /* MBIMActivationCommandActivate */
-				ctx->apn,
-				username,
-				password,
-				0, /*MBIMCompressionNone */
-				auth_method_to_auth_protocol(ctx->auth_method),
-				proto_to_context_ip_type(ctx->proto),
-				mbim_context_type_internet);
+
+	if (mbim_device_mbimex_version_at_least(mbimex_version, 3, 0)) {
+		mbim_message_set_arguments(message, "uuuuu16yussss",
+			ctx->cid,
+			1, /* MBIMActivationCommandActivate */
+			0, /* MBIMCompressionNone */
+			auth_method_to_auth_protocol(ctx->auth_method),
+			proto_to_context_ip_type(ctx->proto),
+			mbim_context_type_internet,
+			0, /* MBIMMediaTypeNone */
+			ctx->apn,
+			username,
+			password,
+			NULL);
+	} else {
+		mbim_message_set_arguments(message, "uusssuuu16y",
+			ctx->cid,
+			1, /* MBIMActivationCommandActivate */
+			ctx->apn,
+			username,
+			password,
+			0, /* MBIMCompressionNone */
+			auth_method_to_auth_protocol(ctx->auth_method),
+			proto_to_context_ip_type(ctx->proto),
+			mbim_context_type_internet);
+	}
 
 	if (mbim_device_send(gcd->device, GPRS_CONTEXT_GROUP, message,
 				mbim_activate_cb, gc, NULL) > 0)

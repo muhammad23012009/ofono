@@ -37,4 +37,3 @@ int mbim_data_class_to_tech(uint32_t n)
 
 	return -1;
 }
-

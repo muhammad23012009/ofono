@@ -281,6 +281,29 @@ error:
 	mbim_device_shutdown(md->device);
 }
 
+static void mbim_device_mbimex_version_cb(struct mbim_message *message,
+								void *user)
+{
+	struct ofono_modem *modem = user;
+	uint16_t mbim_version, mbimex_version;
+
+	if (mbim_message_get_error(message) != 0) {
+		/* Fallback to MBIM 1.0 with no extensions */
+		mbim_version = (1 << 8) | 0;
+		mbimex_version = (0 << 8) | 0;
+		goto version_set;
+	}
+
+	mbim_message_get_arguments(message, "qq",
+		&mbim_version, &mbimex_version);
+
+version_set:
+	ofono_modem_set_integer(modem, "MBIMVersion",
+		mbim_version);
+	ofono_modem_set_integer(modem, "MBIMExVersion",
+		mbimex_version);
+}
+
 static void mbim_device_closed(void *user_data)
 {
 	struct ofono_modem *modem = user_data;
@@ -297,6 +320,22 @@ static void mbim_device_ready(void *user_data)
 	struct ofono_modem *modem = user_data;
 	struct mbim_data *md = ofono_modem_get_data(modem);
 	struct mbim_message *message;
+
+	/* Version is formatted as (major version) << 8 | (minor version) */
+	static const uint16_t mbim_version = (1 << 8) | 0;
+
+	/* Always open with MBIMEx 3, devices not supporting it will fallback to MBIMEx 2 */
+	static const uint16_t mbimex_version = (3 << 8) | 0;
+
+	message = mbim_message_new(mbim_ms_basic_connect_extensions,
+					MBIM_CID_MS_BASIC_CONNECT_EXTENSIONS_VERSION,
+					MBIM_COMMAND_TYPE_QUERY);
+	mbim_message_set_arguments(message, "qq",
+					mbim_version,
+					mbimex_version);
+
+	mbim_device_send(md->device, 0, message,
+				mbim_device_mbimex_version_cb, modem, NULL);
 
 	message = mbim_message_new(mbim_uuid_basic_connect,
 					MBIM_CID_DEVICE_CAPS,
