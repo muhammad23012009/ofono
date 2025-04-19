@@ -107,6 +107,11 @@ const uint8_t mbim_context_type_local[] = {
 	0x03, 0x3C, 0x39, 0xF6, 0x0D, 0xB9,
 };
 
+const uint8_t mbim_ms_basic_connect_extensions[] = {
+	0x3D, 0x01, 0xDC, 0xC5, 0xFE, 0xF5, 0x4D, 0x05, 0x0D, 0x3A,
+	0xBE, 0xF7, 0x05, 0x8E, 0x9A, 0xAF,
+};
+
 struct message_assembly_node {
 	struct mbim_message_header msg_hdr;
 	struct mbim_fragment_header frag_hdr;
@@ -1037,6 +1042,14 @@ bool mbim_device_set_ready_handler(struct mbim_device *device,
 	device->ready_data = user_data;
 
 	return true;
+}
+
+bool mbim_device_mbimex_version_at_least(uint16_t mbimex_version,
+					int version_major, int version_minor)
+{
+	return ((mbimex_version >> 8) > version_major) ||
+			(((mbimex_version >> 8) == version_major) &&
+			((mbimex_version & 0xFF) >= version_minor));
 }
 
 uint32_t mbim_device_send(struct mbim_device *device, uint32_t gid,
