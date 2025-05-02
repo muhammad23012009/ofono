@@ -392,6 +392,8 @@ static void mbim_subscriber_ready_status_changed(struct mbim_message *message,
 	char *imsi;
 	char *iccid;
 	uint32_t ready_info;
+	uint32_t ready_flags;
+	bool r;
 
 	DBG("");
 
@@ -430,6 +432,7 @@ static void mbim_subscriber_ready_status_cb(struct mbim_message *message,
 	char *imsi;
 	char *iccid;
 	uint32_t ready_info;
+	uint32_t ready_flags;
 	bool r;
 
 	DBG("");
