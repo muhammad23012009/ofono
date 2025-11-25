@@ -139,8 +139,8 @@ static bool _iter_copy_string(struct mbim_message_iter *iter,
 					uint32_t offset, uint32_t len,
 					char **out)
 {
-	uint16_t buf[len / 2 + 1];
-	uint8_t *dest = (uint8_t *) buf;
+	uint8_t buf[len + 1];
+	uint8_t *dest = buf;
 	uint32_t remaining = len;
 	uint32_t iov_start = 0;
 	uint32_t i = 0;
@@ -164,7 +164,7 @@ static bool _iter_copy_string(struct mbim_message_iter *iter,
 	if (tocopy > remaining)
 		tocopy = remaining;
 
-	memcpy(dest, iter->iov[i].iov_base + offset - iov_start, tocopy);
+	memcpy(buf, iter->iov[i].iov_base + offset - iov_start, tocopy);
 	remaining -= tocopy;
 	dest += tocopy;
 	i += 1;
@@ -180,15 +180,21 @@ static bool _iter_copy_string(struct mbim_message_iter *iter,
 		dest += tocopy;
 	}
 
-	/* Strings are in UTF16-LE, so convert to UTF16-CPU first if needed */
-	if (L_CPU_TO_LE16(0x8000) != 0x8000) {
-		uint16_t *le = buf;
+	dest = buf;
+	if (!l_utf8_validate((const char*)dest, len, NULL)) {
+		/* Strings are in UTF16-LE, so convert to UTF16-CPU first if needed */
+		if (L_CPU_TO_LE16(0x8000) != 0x8000) {
+			uint16_t *le = (uint16_t*)dest;
 
-		for (i = 0; i < len / 2; i++)
-			le[i] = __builtin_bswap16(le[i]);
+			for (i = 0; i < len / 2; i++)
+				le[i] = __builtin_bswap16(le[i]);
+		}
+
+		*out = l_utf8_from_utf16(dest, len);
+	} else {
+		*out = l_strndup(dest, len);
 	}
 
-	*out = l_utf8_from_utf16(buf, len);
 	return true;
 }
 
