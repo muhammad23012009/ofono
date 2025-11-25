@@ -39,6 +39,26 @@ int mbim_data_class_to_tech(uint32_t n)
 	return -1;
 }
 
+int mbim_provider_state_to_status(uint32_t state)
+{
+	switch (state) {
+	case MBIM_PROVIDER_STATE_REGISTERED:
+		return OPERATOR_STATUS_CURRENT;
+
+	case MBIM_PROVIDER_STATE_VISIBLE:
+	case MBIM_PROVIDER_STATE_HOME:
+	case MBIM_PROVIDER_STATE_PREFERRED:
+	case MBIM_PROVIDER_STATE_PREFERRED_MULTICARRIER:
+		return OPERATOR_STATUS_AVAILABLE;
+
+	case MBIM_PROVIDER_STATE_FORBIDDEN:
+		return OPERATOR_STATUS_FORBIDDEN;
+
+	default:
+		return OPERATOR_STATUS_UNKNOWN;
+	}
+}
+
 uint8_t *mbim_get_fileid_new(enum mbim_app_type app_type, uint32_t fileid, int *file_id_len)
 {
 	uint8_t parent_path[6] = {0};
