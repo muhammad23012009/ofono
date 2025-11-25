@@ -80,6 +80,21 @@ enum mbim_data_class {
 	MBIM_DATA_CLASS_CUSTOM		= 0x80000000,
 };
 
+enum mbim_provider_state {
+	MBIM_PROVIDER_STATE_UNKNOWN                = 0,
+	MBIM_PROVIDER_STATE_HOME                   = 1 << 0,
+	MBIM_PROVIDER_STATE_FORBIDDEN              = 1 << 1,
+	MBIM_PROVIDER_STATE_PREFERRED              = 1 << 2,
+	MBIM_PROVIDER_STATE_VISIBLE                = 1 << 3,
+	MBIM_PROVIDER_STATE_REGISTERED             = 1 << 4,
+	MBIM_PROVIDER_STATE_PREFERRED_MULTICARRIER = 1 << 5
+};
+
+enum mbim_register_type {
+	MBIM_REGISTER_TYPE_AUTOMATIC    = 0,
+	MBIM_REGISTER_TYPE_MANUAL       = 1,
+};
+
 enum mbim_app_type {
 	MBIM_APP_UNKNOWN,
 	MBIM_APP_MF,
