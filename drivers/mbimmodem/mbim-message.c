@@ -309,7 +309,8 @@ static bool _iter_next_entry_basic(struct mbim_message_iter *iter,
 }
 
 static bool _iter_enter_array(struct mbim_message_iter *iter,
-					struct mbim_message_iter *array)
+					struct mbim_message_iter *array,
+					bool fixed_array)
 {
 	size_t pos;
 	uint32_t n_elem;
@@ -322,7 +323,7 @@ static bool _iter_enter_array(struct mbim_message_iter *iter,
 	if (iter->container_type == CONTAINER_TYPE_ARRAY && !iter->n_elem)
 		return false;
 
-	if (iter->sig_start[iter->sig_pos] != 'a')
+	if (iter->sig_start[iter->sig_pos] != 'a' && iter->sig_start[iter->sig_pos] != 'A')
 		return false;
 
 	sig_start = iter->sig_start + iter->sig_pos + 1;
@@ -335,7 +336,7 @@ static bool _iter_enter_array(struct mbim_message_iter *iter,
 	 */
 	fixed = is_fixed_size(sig_start, sig_end);
 
-	if (fixed) {
+	if (fixed || fixed_array) {
 		pos = align_len(iter->pos, 4);
 		if (pos + 4 > iter->len)
 			return false;
@@ -351,12 +352,15 @@ static bool _iter_enter_array(struct mbim_message_iter *iter,
 
 	data = _iter_get_data(iter, pos);
 	n_elem = l_get_le32(data);
-	pos += 4;
+	if (fixed)
+		pos += 4;
+	else if (fixed_array)
+		iter->pos += 4;
 
 	if (iter->container_type != CONTAINER_TYPE_ARRAY)
 		iter->sig_pos += sig_end - sig_start + 1;
 
-	if (fixed) {
+	if (fixed || fixed_array) {
 _Pragma("GCC diagnostic push")
 _Pragma("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")
 		_iter_init_internal(array, CONTAINER_TYPE_ARRAY,
@@ -518,13 +522,21 @@ static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 				iter = &stack[indent - 1];
 			break;
 		case 'a':
-			out_n_elem = va_arg(args, uint32_t *);
 			sub_iter = va_arg(args, void *);
 
-			if (!_iter_enter_array(iter, sub_iter))
+			if (!_iter_enter_array(iter, sub_iter, false))
 				return false;
 
-			*out_n_elem = sub_iter->n_elem;
+			end = _signature_end(signature + 1);
+			signature = end + 1;
+			break;
+		// Fixed array with an OL pair list, no element count
+		// TODO: Implement sending fixed arrays to the modem too
+		case 'A':
+			sub_iter = va_arg(args, void *);
+
+			if (!_iter_enter_array(iter, sub_iter, true))
+				return false;
 
 			end = _signature_end(signature + 1);
 			signature = end + 1;

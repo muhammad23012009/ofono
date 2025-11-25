@@ -175,7 +175,7 @@ static void provisioned_contexts_query_cb(struct mbim_message *message,
 	if (mbim_message_get_error(message) != 0)
 		return;
 
-	if (!mbim_message_get_arguments(message, "a(u16ysssuu)",
+	if (!mbim_message_get_arguments(message, "ua(u16ysssuu)",
 						&n_contexts, &contexts))
 		return;
 
