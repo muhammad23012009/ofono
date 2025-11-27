@@ -211,6 +211,8 @@ void ofono_sim_remove(struct ofono_sim *sim);
 
 void ofono_sim_set_data(struct ofono_sim *sim, void *data);
 void *ofono_sim_get_data(struct ofono_sim *sim);
+struct ofono_modem *ofono_sim_get_modem(struct ofono_sim *sim);
+
 void ofono_sim_set_card_slot_count(struct ofono_sim *sim, unsigned int val);
 void ofono_sim_set_active_card_slot(struct ofono_sim *sim,
 					unsigned int val);

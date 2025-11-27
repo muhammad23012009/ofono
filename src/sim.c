@@ -3423,6 +3423,11 @@ void *ofono_sim_get_data(struct ofono_sim *sim)
 	return sim->driver_data;
 }
 
+struct ofono_modem *ofono_sim_get_modem(struct ofono_sim *sim)
+{
+	return __ofono_atom_get_modem(sim->atom);
+}
+
 static ofono_bool_t is_valid_pin(const char *pin, unsigned int min,
 					unsigned int max)
 {
