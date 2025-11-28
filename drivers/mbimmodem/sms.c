@@ -211,7 +211,7 @@ static void mbim_parse_sms_read_info(struct mbim_message *message,
 	uint32_t status;
 	uint32_t pdu_len;
 
-	if (!mbim_message_get_arguments(message, "ua(uuay)",
+	if (!mbim_message_get_arguments(message, "uua(uuay)",
 						&format, &n_sms, &array))
 		return;
 
@@ -219,7 +219,8 @@ static void mbim_parse_sms_read_info(struct mbim_message *message,
 		return;
 
 	while (mbim_message_iter_next_entry(&array, &index, &status,
-							&pdu_len, &bytes)) {
+							&bytes)) {
+		pdu_len = bytes.n_elem;
 		int i = 0;
 
 		/* Ignore Draft (2) and Sent (3) messages */
