@@ -44,5 +44,5 @@ static inline struct cb_data *cb_data_new(void *cb, void *data)
 
 int mbim_data_class_to_tech(uint32_t n);
 int mbim_provider_state_to_status(uint32_t state);
+int mbim_sim_app_type_to_ofono(enum mbim_app_type app_type);
 uint8_t *mbim_get_fileid(uint32_t fileid);
-

@@ -669,6 +669,168 @@ static void mbim_sim_list_apps_cb(struct mbim_message *message,
 	}
 }
 
+static void mbim_list_apps(struct ofono_sim *sim,
+				ofono_sim_list_apps_cb_t cb, void *user_data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct sim_app_record *apps;
+
+	apps = l_new(struct sim_app_record, sd->app_count);
+
+	for (int i = 0; i < sd->app_count; i++) {
+		l_memcpy(apps[i].aid, sd->apps[i].aid, sd->apps[i].aid_len);
+		apps[i].aid_len = sd->apps[i].aid_len;
+		apps[i].label = l_strdup(sd->apps[i].label);
+		apps[i].type = mbim_sim_app_type_to_ofono(sd->apps[i].app_type);
+	}
+
+	DBG("");
+
+	CALLBACK_WITH_SUCCESS(cb, apps, sd->app_count, user_data);
+}
+
+static void mbim_open_channel_cb(struct mbim_message *message, void *user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_open_channel_cb_t cb = cbd->cb;
+	uint32_t status, session_id;
+
+	DBG("");
+
+	ofono_debug("OPEN CHANNEL RESPONSE, %d error", mbim_message_get_error(message));
+	if (mbim_message_get_error(message) != 0) {
+		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+		return;
+	}
+
+	/* Ignore the byte array at the end */
+	if (!mbim_message_get_arguments(message, "uu", &status, &session_id)) {
+		CALLBACK_WITH_FAILURE(cb, -1, cbd->data);
+		return;
+	}
+
+	CALLBACK_WITH_SUCCESS(cb, session_id, cbd->data);
+}
+
+static void mbim_open_channel(struct ofono_sim *sim,
+				const unsigned char *aid,
+				ofono_sim_open_channel_cb_t cb, void *user_data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	struct mbim_message *message;
+
+	message = mbim_message_new(mbim_ms_uicc_low_level_access,
+					MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_OPEN_CHANNEL,
+					MBIM_COMMAND_TYPE_SET);
+
+	mbim_message_set_arguments(message, "Ayuu",
+					16, aid, 4, 0);
+
+	if (!mbim_device_send(sd->device, SIM_GROUP, message,
+				mbim_open_channel_cb, cbd, l_free)) {
+		ofono_debug("FUCK!");
+		return;
+	}
+
+	//l_free(cbd);
+	//mbim_message_unref(message);
+	//CALLBACK_WITH_FAILURE(cb, -1, user_data);
+}
+
+static void mbim_close_channel_cb(struct mbim_message *message, void *user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_lock_unlock_cb_t cb = cbd->cb;
+
+	DBG("");
+
+	if (mbim_message_get_error(message) != 0)
+		CALLBACK_WITH_FAILURE(cb, cbd->data);
+	else
+		CALLBACK_WITH_SUCCESS(cb, cbd->data);
+}
+
+static void mbim_close_channel(struct ofono_sim *sim,
+				int session_id,
+				ofono_sim_lock_unlock_cb_t cb, void *user_data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	struct mbim_message *message;
+
+	message = mbim_message_new(mbim_ms_uicc_low_level_access,
+					MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_CLOSE_CHANNEL,
+					MBIM_COMMAND_TYPE_SET);
+
+	mbim_message_set_arguments(message, "uu",
+					session_id, 0);
+
+	if (mbim_device_send(sd->device, SIM_GROUP, message,
+				mbim_close_channel_cb, cbd, l_free) > 0)
+		return;
+
+	l_free(cbd);
+	mbim_message_unref(message);
+	CALLBACK_WITH_FAILURE(cb, user_data);
+}
+
+static void mbim_logical_access_cb(struct mbim_message *message, void *user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_sim_logical_access_cb_t cb = cbd->cb;
+	struct mbim_message_iter iter;
+	uint32_t status, data_size;
+	uint8_t *data = NULL;
+	int i = 0;
+
+	DBG("");
+
+	if (!mbim_message_get_error(message)) {
+		mbim_message_get_arguments(message, "uMy", &status,
+						&iter);
+
+		data_size = iter.n_elem;
+		ofono_debug("LOGICAL ACCESS RESPONSE, data size: %u", data_size);
+		data = l_malloc(data_size);
+		while (mbim_message_iter_next_entry(&iter, data + i))
+			i++;
+
+		CALLBACK_WITH_SUCCESS(cb, data, data_size, cbd->data);
+	} else {
+		CALLBACK_WITH_FAILURE(cb, NULL, 0, cbd->data);
+	}
+
+	/* The data gets copied by ofono's sim driver, so we can free it */
+	if (data)
+		l_free(data);
+}
+
+static void mbim_logical_access(struct ofono_sim *sim,
+				int session_id,
+				const unsigned char *pdu, unsigned int len,
+				ofono_sim_logical_access_cb_t cb, void *user_data)
+{
+	struct sim_data *sd = ofono_sim_get_data(sim);
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	struct mbim_message *message;
+
+	message = mbim_message_new(mbim_ms_uicc_low_level_access,
+					MBIM_CID_MS_UICC_LOW_LEVEL_ACCESS_APDU,
+					MBIM_COMMAND_TYPE_SET);
+
+	mbim_message_set_arguments(message, "uuuAy",
+					session_id, 0, 0, len, pdu);
+
+	if (mbim_device_send(sd->device, SIM_GROUP, message,
+				mbim_logical_access_cb, cbd, l_free) > 0)
+		return;
+
+	l_free(cbd);
+	mbim_message_unref(message);
+	CALLBACK_WITH_FAILURE(cb, NULL, 0, user_data);
+}
+
 static int mbim_sim_probe(struct ofono_sim *sim, unsigned int vendor,
 				void *data)
 {
@@ -741,6 +903,10 @@ static const struct ofono_sim_driver driver = {
 	.reset_passwd		= mbim_puk_enter,
 	.change_passwd		= mbim_pin_change,
 	.lock			= mbim_pin_enable,
+	.list_apps		= mbim_list_apps,
+	.open_channel		= mbim_open_channel,
+	.close_channel		= mbim_close_channel,
+	.logical_access		= mbim_logical_access,
 };
 
 OFONO_ATOM_DRIVER_BUILTIN(sim, mbim, &driver)

@@ -1870,7 +1870,7 @@ static void impi_read_cb(int ok, int total_length, int record,
 }
 
 static void discover_apps_cb(const struct ofono_error *error,
-		const unsigned char *dataobj,
+		struct sim_app_record *apps,
 		int len, void *data)
 {
 	GSList *iter;
@@ -1879,7 +1879,11 @@ static void discover_apps_cb(const struct ofono_error *error,
 	if (error->type != OFONO_ERROR_TYPE_NO_ERROR)
 		return;
 
-	sim->aid_list = sim_parse_app_template_entries(dataobj, len);
+	for (int i = 0; i < len; ++i) {
+		ofono_debug("Processing app: Label: %s, Type: %d", apps[i].label, apps[i].type);
+		sim->aid_list = g_slist_prepend(sim->aid_list, &apps[i]);
+	}
+	//sim->aid_list = sim_parse_app_template_entries(dataobj, len);
 
 	iter = sim->aid_list;
 

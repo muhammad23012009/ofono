@@ -59,6 +59,19 @@ int mbim_provider_state_to_status(uint32_t state)
 	}
 }
 
+int mbim_sim_app_type_to_ofono(enum mbim_app_type app_type)
+{
+	switch (app_type) {
+	case MBIM_APP_USIM:
+		return SIM_APP_TYPE_USIM;
+	case MBIM_APP_ISIM:
+		return SIM_APP_TYPE_ISIM;
+	case MBIM_APP_CSIM:
+	default:
+		return SIM_APP_TYPE_UICC;
+	}
+}
+
 uint8_t *mbim_get_fileid(uint32_t fileid)
 {
 	/* TODO: Handle MF paths for different app types */

@@ -308,9 +308,11 @@ static bool _iter_next_entry_basic(struct mbim_message_iter *iter,
 	return true;
 }
 
+#include <stdio.h>
+
 static bool _iter_enter_array(struct mbim_message_iter *iter,
 					struct mbim_message_iter *array,
-					bool fixed_array)
+					bool fixed_array, bool flipped_ol_pair)
 {
 	size_t pos;
 	uint32_t n_elem;
@@ -323,7 +325,7 @@ static bool _iter_enter_array(struct mbim_message_iter *iter,
 	if (iter->container_type == CONTAINER_TYPE_ARRAY && !iter->n_elem)
 		return false;
 
-	if (iter->sig_start[iter->sig_pos] != 'a' && iter->sig_start[iter->sig_pos] != 'A')
+	if (iter->sig_start[iter->sig_pos] != 'a' && iter->sig_start[iter->sig_pos] != 'A' && iter->sig_start[iter->sig_pos] != 'M')
 		return false;
 
 	sig_start = iter->sig_start + iter->sig_pos + 1;
@@ -336,22 +338,44 @@ static bool _iter_enter_array(struct mbim_message_iter *iter,
 	 */
 	fixed = is_fixed_size(sig_start, sig_end) || fixed_array;
 
-	if (fixed) {
+	printf("Entering array, fixed: %d, flipped_ol_pair: %d\n", fixed, flipped_ol_pair);
+
+	if (!flipped_ol_pair) {
+		if (fixed) {
+			pos = align_len(iter->pos, 4);
+			if (pos + 4 > iter->len)
+				return false;
+
+			data = _iter_get_data(iter, pos);
+			offset = l_get_le32(data);
+			iter->pos += 4;
+		}
+
+		pos = align_len(iter->pos, 4);
+		if (pos + 4 > iter->len)
+			return false;
+
+		data = _iter_get_data(iter, pos);
+		n_elem = l_get_le32(data);
+
+	} else if (flipped_ol_pair) {
+		pos = align_len(iter->pos, 4);
+		if (pos + 4 > iter->len)
+			return false;
+
+		data = _iter_get_data(iter, pos);
+		n_elem = l_get_le32(data);
+		printf("Number of elements: %u\n", n_elem);
+
+		iter->pos += 4;
 		pos = align_len(iter->pos, 4);
 		if (pos + 4 > iter->len)
 			return false;
 
 		data = _iter_get_data(iter, pos);
 		offset = l_get_le32(data);
-		iter->pos += 4;
+		printf("Offset: %u\n", offset);
 	}
-
-	pos = align_len(iter->pos, 4);
-	if (pos + 4 > iter->len)
-		return false;
-
-	data = _iter_get_data(iter, pos);
-	n_elem = l_get_le32(data);
 
 	if (fixed)
 		iter->pos += 4;
@@ -451,9 +475,11 @@ static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 	struct mbim_message_iter *sub_iter;
 	struct mbim_message_iter stack[MAX_NESTING];
 	unsigned int indent = 0;
+	bool flipped_ol_pair = false;
 	void *arg;
 
 	while (signature < orig->sig_start + orig->sig_len) {
+		printf("Processing signature: %c\n", *signature);
 		if (strchr(simple_types, *signature)) {
 			arg = va_arg(args, void *);
 			if (!_iter_next_entry_basic(iter, *signature, arg))
@@ -522,7 +548,7 @@ static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 		case 'a':
 			sub_iter = va_arg(args, void *);
 
-			if (!_iter_enter_array(iter, sub_iter, false))
+			if (!_iter_enter_array(iter, sub_iter, false, false))
 				return false;
 
 			end = _signature_end(signature + 1);
@@ -534,7 +560,17 @@ static bool message_iter_next_entry_valist(struct mbim_message_iter *orig,
 		case 'A':
 			sub_iter = va_arg(args, void *);
 
-			if (!_iter_enter_array(iter, sub_iter, true))
+			if (!_iter_enter_array(iter, sub_iter, true, false))
+				return false;
+
+			end = _signature_end(signature + 1);
+			signature = end + 1;
+			break;
+		case 'M':
+			printf("Flipped OL pair list detected\n");
+			sub_iter = va_arg(args, void *);
+
+			if (!_iter_enter_array(iter, sub_iter, true, true))
 				return false;
 
 			end = _signature_end(signature + 1);
@@ -1169,7 +1205,7 @@ done:
 }
 
 bool mbim_message_builder_append_bytes(struct mbim_message_builder *builder,
-					size_t len, const uint8_t *bytes)
+					size_t len, const uint8_t *bytes, bool flipped_ol_pair)
 {
 	struct container *container = &builder->stack[builder->index];
 	size_t start;
@@ -1191,7 +1227,7 @@ bool mbim_message_builder_append_bytes(struct mbim_message_builder *builder,
 
 		start = GROW_DBUF(container, len, 1);
 		memcpy(container->dbuf + start, bytes, len);
-		l_put_le32(len, container->sbuf + array->array_start + 4);
+		l_put_le32(len, container->sbuf + array->array_start + (flipped_ol_pair ? 0 : 4));
 
 		return true;
 	} else if (container->container_type == CONTAINER_TYPE_STRUCT) {
@@ -1296,8 +1332,15 @@ bool mbim_message_builder_leave_struct(struct mbim_message_builder *builder)
 	return true;
 }
 
+#include <stdio.h>
+
+static void dbg_func(const char *str, void *user)
+{
+	printf("%s\n", str);
+}
+
 bool mbim_message_builder_enter_array(struct mbim_message_builder *builder,
-					const char *signature)
+					const char *signature, bool flipped_ol_pair)
 {
 	struct container *parent;
 	struct container *container;
@@ -1329,13 +1372,15 @@ bool mbim_message_builder_enter_array(struct mbim_message_builder *builder,
 				_signature_end(container->signature))) {
 		/* Note down offset into the data buffer */
 		size_t start = GROW_DBUF(parent, 0, 4);
-		l_put_u32(start, parent->sbuf + container->array_start);
+		printf("Printing static buffer:\n");
+		l_util_hexdump(true, parent->sbuf, parent->sbuf_pos, dbg_func, NULL);
+		l_put_u32(start, parent->sbuf + container->array_start + (flipped_ol_pair ? 4 : 0));
 		/* Set length to 0 */
 		start = GROW_SBUF(parent, 4, 4);
-		l_put_le32(0, parent->sbuf + start);
+		l_put_le32(0, parent->sbuf + start - (flipped_ol_pair ? 4 : 0));
 		/* Note down offset position to recalculate */
 		start = GROW_OBUF(parent);
-		l_put_u32(container->array_start, parent->obuf + start);
+		l_put_u32(container->array_start + (flipped_ol_pair ? 4 : 0), parent->obuf + start);
 	}
 
 	return true;
@@ -1469,6 +1514,8 @@ struct mbim_message *mbim_message_builder_finalize(
 	return builder->message;
 }
 
+#include <stdio.h>
+
 static bool append_arguments(struct mbim_message *message,
 					const char *signature, va_list args)
 {
@@ -1482,6 +1529,7 @@ static bool append_arguments(struct mbim_message *message,
 		unsigned int n_items;
 	} stack[MAX_NESTING + 1];
 	unsigned int stack_index = 0;
+	bool flipped_ol_pair = false;
 
 	if (strlen(signature) > sizeof(subsig) - 1)
 		return false;
@@ -1541,7 +1589,7 @@ static bool append_arguments(struct mbim_message *message,
 				goto error;
 
 			if (!mbim_message_builder_append_bytes(builder,
-								n_elem, arg))
+								n_elem, arg, false))
 				goto error;
 
 			stack[stack_index].sig_start = sigend + 1;
@@ -1653,6 +1701,10 @@ static bool append_arguments(struct mbim_message *message,
 
 			break;
 		case 'a':
+		case 'A':
+			/* 'A' indicates flipped offset-length pair */
+			flipped_ol_pair = (*s == 'A');
+			printf("flipped_ol_pair=%d\n", flipped_ol_pair);
 			if (stack_index == MAX_NESTING)
 				goto error;
 
@@ -1660,7 +1712,7 @@ static bool append_arguments(struct mbim_message *message,
 			memcpy(subsig, s + 1, sigend - s - 1);
 			subsig[sigend - s - 1] = '\0';
 
-			if (!mbim_message_builder_enter_array(builder, subsig))
+			if (!mbim_message_builder_enter_array(builder, subsig, flipped_ol_pair))
 				goto error;
 
 			if (stack[stack_index].type != CONTAINER_TYPE_ARRAY)
@@ -1679,7 +1731,7 @@ static bool append_arguments(struct mbim_message *message,
 
 				if (!mbim_message_builder_append_bytes(builder,
 						stack[stack_index].n_items,
-						bytes))
+						bytes, flipped_ol_pair))
 					goto error;
 
 				stack[stack_index].n_items = 0;

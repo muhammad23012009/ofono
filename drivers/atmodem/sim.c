@@ -1601,6 +1601,7 @@ done:
 	ofono_sim_register(sim);
 }
 
+#if 0
 static void at_discover_apps_cb(gboolean ok, GAtResult *result,
 				gpointer user_data)
 {
@@ -1660,6 +1661,7 @@ static void at_discover_apps(struct ofono_sim *sim,
 error:
 	CALLBACK_WITH_FAILURE(cb, NULL, 0, data);
 }
+#endif
 
 static void at_open_channel_cb(gboolean ok, GAtResult *result,
 		gpointer user_data)
@@ -2109,7 +2111,7 @@ static const struct ofono_sim_driver driver = {
 	.lock			= at_pin_enable,
 	.change_passwd		= at_change_passwd,
 	.query_facility_lock	= at_query_clck,
-	.list_apps		= at_discover_apps,
+	//.list_apps		= at_discover_apps,
 	.open_channel		= at_open_channel,
 	.close_channel		= at_close_channel,
 	.session_read_binary	= at_session_read_binary,

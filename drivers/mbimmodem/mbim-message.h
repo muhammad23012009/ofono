@@ -65,12 +65,12 @@ void mbim_message_builder_free(struct mbim_message_builder *builder);
 bool mbim_message_builder_append_basic(struct mbim_message_builder *builder,
 					char type, const void *value);
 bool mbim_message_builder_append_bytes(struct mbim_message_builder *builder,
-					size_t len, const uint8_t *bytes);
+					size_t len, const uint8_t *bytes, bool flipped_ol_pair);
 bool mbim_message_builder_enter_struct(struct mbim_message_builder *builder,
 					const char *signature);
 bool mbim_message_builder_leave_struct(struct mbim_message_builder *builder);
 bool mbim_message_builder_enter_array(struct mbim_message_builder *builder,
-					const char *signature);
+					const char *signature, bool flipped_ol_pair);
 bool mbim_message_builder_leave_array(struct mbim_message_builder *builder);
 bool mbim_message_builder_enter_databuf(struct mbim_message_builder *builder,
 					const char *signature);

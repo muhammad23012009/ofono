@@ -18,6 +18,7 @@ extern "C" {
 
 struct ofono_sim;
 struct ofono_sim_context;
+struct sim_app_record;
 
 /* 51.011 Section 9.3 */
 enum ofono_sim_file_structure {
@@ -110,7 +111,7 @@ typedef void (*ofono_query_facility_lock_cb_t)(const struct ofono_error *error,
 					ofono_bool_t status, void *data);
 
 typedef void (*ofono_sim_list_apps_cb_t)(const struct ofono_error *error,
-					const unsigned char *dataobj,
+					struct sim_app_record *apps,
 					int len, void *data);
 typedef void (*ofono_sim_open_channel_cb_t)(const struct ofono_error *error,
 					int session_id, void *data);

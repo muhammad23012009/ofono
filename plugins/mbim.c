@@ -24,6 +24,7 @@
 #include <ofono/log.h>
 #include <ofono/devinfo.h>
 #include <ofono/sim.h>
+#include <ofono/sim-auth.h>
 #include <ofono/netreg.h>
 #include <ofono/sms.h>
 #include <ofono/gprs.h>
@@ -468,6 +469,7 @@ static void mbim_post_sim(struct ofono_modem *modem)
 					OFONO_GPRS_CONTEXT_TYPE_INTERNET);
 		ofono_gprs_add_context(gprs, gc);
 	}
+	ofono_sim_auth_create(modem);
 }
 
 static void mbim_post_online(struct ofono_modem *modem)
