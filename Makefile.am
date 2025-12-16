@@ -413,7 +413,8 @@ builtin_sources += $(mbim_sources) \
 			drivers/mbimmodem/network-registration.c \
 			drivers/mbimmodem/sms.c \
 			drivers/mbimmodem/gprs.c \
-			drivers/mbimmodem/gprs-context.c
+			drivers/mbimmodem/gprs-context.c \
+			drivers/mbimmodem/radio-settings.c
 
 builtin_sources += plugins/mbim.c
 endif

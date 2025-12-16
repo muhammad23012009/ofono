@@ -28,6 +28,7 @@
 #include <ofono/sms.h>
 #include <ofono/gprs.h>
 #include <ofono/gprs-context.h>
+#include <ofono/radio-settings.h>
 
 #include <ell/ell.h>
 
@@ -256,6 +257,7 @@ static void mbim_device_caps_query_cb(struct mbim_message *message, void *user)
 
 	md->max_sessions = max_sessions;
 
+	DBG("DataClass: %d", data_class);
 	DBG("DeviceId: %s", device_id);
 	DBG("FirmwareInfo: %s", firmware_info);
 	DBG("HardwareInfo: %s", hardware_info);
@@ -474,6 +476,7 @@ static void mbim_post_online(struct ofono_modem *modem)
 	DBG("%p", modem);
 
 	ofono_netreg_create(modem, 0, "mbim", md->device);
+	ofono_radio_settings_create(modem, 0, "mbim", md->device);
 }
 
 static struct ofono_modem_driver mbim_driver = {
