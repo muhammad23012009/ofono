@@ -17,6 +17,11 @@ enum mbim_command_type {
 	MBIM_COMMAND_TYPE_SET = 1,
 };
 
+enum mbim_tlv_type {
+	MBIM_TLV_TYPE_INVALID = 0,
+	MBIM_TLV_TYPE_WCHAR_STR = 10,
+};
+
 struct mbim_message_iter {
 	const char *sig_start;
 	uint8_t sig_len;

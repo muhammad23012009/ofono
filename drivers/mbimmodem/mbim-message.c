@@ -1669,6 +1669,47 @@ static bool append_arguments(struct mbim_message *message,
 			}
 
 			break;
+		case 'T':
+		{
+			/* TLV value */
+			uint16_t tlv_type = (uint16_t) va_arg(args, int);
+			if (tlv_type == MBIM_TLV_TYPE_INVALID)
+				break;
+
+			struct mbim_tlv_header header = {0};
+			header.type = L_CPU_TO_LE16(tlv_type);
+
+			switch (tlv_type) {
+			case MBIM_TLV_TYPE_WCHAR_STR: {
+				size_t utf16_len = 0;
+				str = va_arg(args, const char *);
+				L_AUTO_FREE_VAR(void *, val) = l_utf8_to_utf16(str, &utf16_len);
+
+				if (utf16_len > 0)
+					header.padding_len = (utf16_len % 4) ? (4 - (utf16_len % 4)) : 0;
+
+				header.data_length = L_CPU_TO_LE32(utf16_len);
+
+				if (!mbim_message_builder_append_bytes(builder,
+						sizeof(header), (uint8_t *)&header))
+					goto error;
+
+				if (val)
+					if (!mbim_message_builder_append_bytes(builder,
+							utf16_len, val))
+						goto error;
+			}
+			}
+
+			if (header.padding_len) {
+				struct container *cont = &builder->stack[builder->index];
+				size_t start = GROW_SBUF(cont, header.padding_len, 1);
+				memset(cont->sbuf + start, 0, header.padding_len);
+			}
+
+			break;
+		}
+
 		default:
 			goto error;
 		}

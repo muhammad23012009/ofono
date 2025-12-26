@@ -32,6 +32,13 @@ struct mbim_fragment_header {
 	__le32 cur_frag;
 } __attribute__ ((packed));
 
+struct mbim_tlv_header {
+	__le16 type;
+	uint8_t reserved;
+	uint8_t padding_len;
+	__le32 data_length;
+} __attribute__((packed));
+
 struct mbim_message *_mbim_message_build(const void *header,
 						struct iovec *frags,
 						uint32_t n_frags);
